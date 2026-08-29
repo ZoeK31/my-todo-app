@@ -1,0 +1,11 @@
+// use prisma-next
+
+model Todo {
+  id          Uuid              @id @default(uuid())
+  userId      Uuid              @map("user_id")
+  title       String
+  isCompleted Boolean           @default(false) @map("is_completed")
+  createdAt   TimestamptzString @default(now()) @map("created_at")
+
+  @@map("todos")
+}
