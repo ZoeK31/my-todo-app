@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "contract:emit": "prisma contract emit"
+    "contract:emit": "prisma contract emit",
+    "postinstall": "prisma contract emit"
   },
   "dependencies": {
     "@prisma/orm-postgres": "^8.0.0-rc.8",
