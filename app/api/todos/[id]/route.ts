@@ -6,6 +6,7 @@ import type { ApiErrorResponse, TodoDto, TodoPriority } from "../route";
 // ---- 画面側と共有する型 ----
 
 export type UpdateTodoRequestBody = {
+  title?: string;
   isCompleted?: boolean;
   priority?: TodoPriority;
   dueDate?: string | null;
@@ -89,10 +90,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 
   const patch: {
+    title?: string;
     isCompleted?: boolean;
     priority?: TodoPriority;
     dueDate?: string | null;
   } = {};
+
+  if ("title" in body) {
+    const title = body.title?.trim();
+    if (!title) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "title は必須です。" },
+        { status: 400 },
+      );
+    }
+    patch.title = title;
+  }
 
   if ("isCompleted" in body) {
     if (typeof body.isCompleted !== "boolean") {
@@ -126,7 +139,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json<ApiErrorResponse>(
-      { error: "更新する項目 (isCompleted / priority / dueDate) を指定してください。" },
+      {
+        error:
+          "更新する項目 (title / isCompleted / priority / dueDate) を指定してください。",
+      },
       { status: 400 },
     );
   }

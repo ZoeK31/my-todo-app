@@ -17,7 +17,9 @@ import type {
   UpdateTodoRequestBody,
   UpdateTodoResponse,
 } from "@/app/api/todos/[id]/route";
-import { inputClassName } from "@/components/auth/formStyles";
+import { inputClassName, labelClassName } from "@/components/auth/formStyles";
+
+const dateInputClassName = `${inputClassName} [color-scheme:dark]`;
 
 const PRIORITY_LABELS: Record<TodoPriority, string> = {
   high: "高",
@@ -50,6 +52,13 @@ export default function Home() {
   const [isAdding, setIsAdding] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const [editDraft, setEditDraft] = useState<{
+    id: string;
+    title: string;
+    priority: TodoPriority;
+    dueDate: string;
+  } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -127,9 +136,13 @@ export default function Home() {
     }
   }
 
-  async function handleUpdate(todo: TodoDto, patch: Partial<UpdateTodoRequestBody>) {
+  async function handleUpdate(
+    todo: TodoDto,
+    patch: Partial<UpdateTodoRequestBody>,
+  ): Promise<boolean> {
     setPendingIds((prev) => new Set(prev).add(todo.id));
     setErrorMessage(null);
+    let success = false;
     try {
       const res = await fetch(`/api/todos/${todo.id}`, {
         method: "PATCH",
@@ -144,6 +157,7 @@ export default function Home() {
       setTodos((prev) =>
         prev.map((t) => (t.id === todo.id ? body.todo : t)),
       );
+      success = true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "更新に失敗しました。",
@@ -155,6 +169,33 @@ export default function Home() {
         return next;
       });
     }
+    return success;
+  }
+
+  function startEdit(todo: TodoDto) {
+    setEditDraft({
+      id: todo.id,
+      title: todo.title,
+      priority: todo.priority,
+      dueDate: todo.dueDate ?? "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditDraft(null);
+  }
+
+  async function saveEdit(todo: TodoDto) {
+    if (!editDraft) return;
+    const title = editDraft.title.trim();
+    if (!title) return;
+
+    const success = await handleUpdate(todo, {
+      title,
+      priority: editDraft.priority,
+      dueDate: editDraft.dueDate === "" ? null : editDraft.dueDate,
+    });
+    if (success) setEditDraft(null);
   }
 
   async function handleDelete(id: string) {
@@ -212,34 +253,52 @@ export default function Home() {
 
       <main className="flex flex-1 justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl shadow-black/40 sm:p-8">
-          <form onSubmit={handleAdd} className="flex flex-wrap gap-2">
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(event) => setNewTitle(event.target.value)}
-              disabled={isAdding}
-              placeholder="やることを入力..."
-              className="w-full min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50"
-            />
-            <select
-              value={newPriority}
-              onChange={(event) => setNewPriority(event.target.value as TodoPriority)}
-              disabled={isAdding}
-              aria-label="優先度"
-              className={inputClassName}
-            >
-              <option value="high">高</option>
-              <option value="medium">中</option>
-              <option value="low">低</option>
-            </select>
-            <input
-              type="date"
-              value={newDueDate}
-              onChange={(event) => setNewDueDate(event.target.value)}
-              disabled={isAdding}
-              aria-label="期限"
-              className={inputClassName}
-            />
+          <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="new-title" className={labelClassName}>
+                タスク名
+              </label>
+              <input
+                id="new-title"
+                type="text"
+                value={newTitle}
+                onChange={(event) => setNewTitle(event.target.value)}
+                disabled={isAdding}
+                placeholder="やることを入力..."
+                className={inputClassName}
+              />
+            </div>
+            <div>
+              <label htmlFor="new-priority" className={labelClassName}>
+                優先度
+              </label>
+              <select
+                id="new-priority"
+                value={newPriority}
+                onChange={(event) =>
+                  setNewPriority(event.target.value as TodoPriority)
+                }
+                disabled={isAdding}
+                className={inputClassName}
+              >
+                <option value="high">高</option>
+                <option value="medium">中</option>
+                <option value="low">低</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="new-due-date" className={labelClassName}>
+                期限
+              </label>
+              <input
+                id="new-due-date"
+                type="date"
+                value={newDueDate}
+                onChange={(event) => setNewDueDate(event.target.value)}
+                disabled={isAdding}
+                className={dateInputClassName}
+              />
+            </div>
             <button
               type="submit"
               disabled={isAdding || newTitle.trim() === ""}
@@ -255,7 +314,33 @@ export default function Home() {
             </p>
           )}
 
-          <ul className="mt-6 space-y-2">
+          {/* 凡例: チェックボックス・優先度バッジ・期限が何を表すかを示す */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-zinc-800 pb-3 text-xs text-zinc-400">
+            <span className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked
+                readOnly
+                disabled
+                className="h-3.5 w-3.5 accent-zinc-50 disabled:opacity-100"
+              />
+              = 完了
+            </span>
+            <span className="flex items-center gap-1.5">
+              優先度:
+              {(["high", "medium", "low"] as const).map((priority) => (
+                <span
+                  key={priority}
+                  className={`rounded-full border px-1.5 py-0.5 text-[11px] font-medium ${PRIORITY_BADGE_CLASSNAMES[priority]}`}
+                >
+                  {PRIORITY_LABELS[priority]}
+                </span>
+              ))}
+            </span>
+            <span>期限: 年/月/日</span>
+          </div>
+
+          <ul className="mt-3 space-y-2">
             {isLoadingTodos && (
               <li className="py-6 text-center text-sm text-zinc-500">
                 読み込み中...
@@ -270,6 +355,101 @@ export default function Home() {
 
             {todos.map((todo) => {
               const isPending = pendingIds.has(todo.id);
+              const isEditing = editDraft?.id === todo.id;
+
+              if (isEditing && editDraft) {
+                return (
+                  <li
+                    key={todo.id}
+                    className="flex flex-col gap-2 rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-3"
+                  >
+                    <div>
+                      <label
+                        htmlFor={`edit-title-${todo.id}`}
+                        className={labelClassName}
+                      >
+                        タスク名
+                      </label>
+                      <input
+                        id={`edit-title-${todo.id}`}
+                        type="text"
+                        value={editDraft.title}
+                        onChange={(event) =>
+                          setEditDraft({ ...editDraft, title: event.target.value })
+                        }
+                        disabled={isPending}
+                        className={inputClassName}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <div>
+                        <label
+                          htmlFor={`edit-priority-${todo.id}`}
+                          className={labelClassName}
+                        >
+                          優先度
+                        </label>
+                        <select
+                          id={`edit-priority-${todo.id}`}
+                          value={editDraft.priority}
+                          onChange={(event) =>
+                            setEditDraft({
+                              ...editDraft,
+                              priority: event.target.value as TodoPriority,
+                            })
+                          }
+                          disabled={isPending}
+                          className={inputClassName}
+                        >
+                          <option value="high">高</option>
+                          <option value="medium">中</option>
+                          <option value="low">低</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`edit-due-date-${todo.id}`}
+                          className={labelClassName}
+                        >
+                          期限
+                        </label>
+                        <input
+                          id={`edit-due-date-${todo.id}`}
+                          type="date"
+                          value={editDraft.dueDate}
+                          onChange={(event) =>
+                            setEditDraft({
+                              ...editDraft,
+                              dueDate: event.target.value,
+                            })
+                          }
+                          disabled={isPending}
+                          className={dateInputClassName}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-1 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        disabled={isPending}
+                        className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(todo)}
+                        disabled={isPending || editDraft.title.trim() === ""}
+                        className="rounded-lg bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        保存
+                      </button>
+                    </div>
+                  </li>
+                );
+              }
+
               return (
                 <li
                   key={todo.id}
@@ -294,49 +474,32 @@ export default function Home() {
                   >
                     {todo.title}
                   </span>
-                  <select
-                    value={todo.priority}
-                    onChange={(event) =>
-                      handleUpdate(todo, {
-                        priority: event.target.value as TodoPriority,
-                      })
-                    }
-                    disabled={isPending}
-                    aria-label={`${todo.title} の優先度`}
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50 ${PRIORITY_BADGE_CLASSNAMES[todo.priority]}`}
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${PRIORITY_BADGE_CLASSNAMES[todo.priority]}`}
                   >
-                    <option value="high">{PRIORITY_LABELS.high}</option>
-                    <option value="medium">{PRIORITY_LABELS.medium}</option>
-                    <option value="low">{PRIORITY_LABELS.low}</option>
-                  </select>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="text-xs text-zinc-400">
-                      {formatDueDate(todo.dueDate)}
-                    </span>
-                    <input
-                      type="date"
-                      value={todo.dueDate ?? ""}
-                      onChange={(event) =>
-                        handleUpdate(todo, {
-                          dueDate:
-                            event.target.value === ""
-                              ? null
-                              : event.target.value,
-                        })
-                      }
+                    {PRIORITY_LABELS[todo.priority]}
+                  </span>
+                  <span className="shrink-0 text-xs text-zinc-400">
+                    {formatDueDate(todo.dueDate)}
+                  </span>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(todo)}
                       disabled={isPending}
-                      aria-label={`${todo.title} の期限`}
-                      className="w-[9.5rem] rounded-lg border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-300 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50"
-                    />
+                      className="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+                    >
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(todo.id)}
+                      disabled={isPending}
+                      className="rounded-lg border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-800 hover:text-red-300 disabled:opacity-50"
+                    >
+                      削除
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(todo.id)}
-                    disabled={isPending}
-                    className="shrink-0 rounded-lg border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-red-800 hover:text-red-300 disabled:opacity-50"
-                  >
-                    削除
-                  </button>
                 </li>
               );
             })}

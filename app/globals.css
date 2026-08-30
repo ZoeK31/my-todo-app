@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* このアプリは常時ダークテーマなので、date input のカレンダーアイコンなど
+     ブラウザ標準UIもダーク基調で描画させる(暗い背景に暗いアイコンが
+     溶け込んで見えなくなるのを防ぐ)。 */
+  color-scheme: dark;
 }
 
 @theme inline {
