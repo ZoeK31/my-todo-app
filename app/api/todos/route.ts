@@ -4,10 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 
 // ---- 画面側と共有する型 ----
 
+export type TodoPriority = "high" | "medium" | "low";
+
 export type TodoDto = {
   id: string;
   title: string;
   isCompleted: boolean;
+  priority: TodoPriority;
+  dueDate: string | null;
   createdAt: string;
 };
 
@@ -21,6 +25,8 @@ export type TodosListResponse = {
 
 export type CreateTodoRequestBody = {
   title: string;
+  priority?: TodoPriority;
+  dueDate?: string | null;
 };
 
 export type CreateTodoResponse = {
@@ -29,16 +35,37 @@ export type CreateTodoResponse = {
 
 // ---- 内部ヘルパー ----
 
+const TODO_PRIORITIES: readonly TodoPriority[] = ["high", "medium", "low"];
+
+function isValidPriority(value: unknown): value is TodoPriority {
+  return (
+    typeof value === "string" &&
+    (TODO_PRIORITIES as readonly string[]).includes(value)
+  );
+}
+
+const DUE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDueDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!DUE_DATE_PATTERN.test(value)) return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
 function toDto(row: {
   id: string;
   title: string;
   isCompleted: boolean;
+  priority: TodoPriority;
+  dueDate: string | null;
   createdAt: string;
 }): TodoDto {
   return {
     id: row.id,
     title: row.title,
     isCompleted: row.isCompleted,
+    priority: row.priority,
+    dueDate: row.dueDate,
     createdAt: row.createdAt,
   };
 }
@@ -101,7 +128,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const created = await db.orm.public.Todo.create({ userId, title });
+  let priority: TodoPriority = "medium";
+  if (body.priority !== undefined) {
+    if (!isValidPriority(body.priority)) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "priority は high / medium / low のいずれかで指定してください。" },
+        { status: 400 },
+      );
+    }
+    priority = body.priority;
+  }
+
+  let dueDate: string | null = null;
+  if (body.dueDate !== undefined && body.dueDate !== null) {
+    if (!isValidDueDate(body.dueDate)) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "dueDate は YYYY-MM-DD 形式で指定してください。" },
+        { status: 400 },
+      );
+    }
+    dueDate = body.dueDate;
+  }
+
+  const created = await db.orm.public.Todo.create({
+    userId,
+    title,
+    priority,
+    dueDate,
+  });
 
   return NextResponse.json<CreateTodoResponse>(
     { todo: toDto(created) },

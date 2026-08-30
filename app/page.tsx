@@ -9,6 +9,7 @@ import type {
   CreateTodoRequestBody,
   CreateTodoResponse,
   TodoDto,
+  TodoPriority,
   TodosListResponse,
 } from "@/app/api/todos/route";
 import type {
@@ -16,6 +17,25 @@ import type {
   UpdateTodoRequestBody,
   UpdateTodoResponse,
 } from "@/app/api/todos/[id]/route";
+import { inputClassName } from "@/components/auth/formStyles";
+
+const PRIORITY_LABELS: Record<TodoPriority, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+const PRIORITY_BADGE_CLASSNAMES: Record<TodoPriority, string> = {
+  high: "bg-red-500/15 text-red-300 border-red-500/30",
+  medium: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+  low: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+};
+
+function formatDueDate(dueDate: string | null): string {
+  if (!dueDate) return "期限なし";
+  const [year, month, day] = dueDate.split("-");
+  return `${year}/${month}/${day}`;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -25,6 +45,8 @@ export default function Home() {
   const [todos, setTodos] = useState<TodoDto[]>([]);
   const [isLoadingTodos, setIsLoadingTodos] = useState(true);
   const [newTitle, setNewTitle] = useState("");
+  const [newPriority, setNewPriority] = useState<TodoPriority>("medium");
+  const [newDueDate, setNewDueDate] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -81,7 +103,11 @@ export default function Home() {
       const res = await fetch("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title } satisfies CreateTodoRequestBody),
+        body: JSON.stringify({
+          title,
+          priority: newPriority,
+          dueDate: newDueDate === "" ? null : newDueDate,
+        } satisfies CreateTodoRequestBody),
       });
       if (!res.ok) {
         const body = (await res.json()) as ApiErrorResponse;
@@ -90,6 +116,8 @@ export default function Home() {
       const body = (await res.json()) as CreateTodoResponse;
       setTodos((prev) => [body.todo, ...prev]);
       setNewTitle("");
+      setNewPriority("medium");
+      setNewDueDate("");
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "TODO の追加に失敗しました。",
@@ -99,16 +127,14 @@ export default function Home() {
     }
   }
 
-  async function handleToggle(todo: TodoDto) {
+  async function handleUpdate(todo: TodoDto, patch: Partial<UpdateTodoRequestBody>) {
     setPendingIds((prev) => new Set(prev).add(todo.id));
     setErrorMessage(null);
     try {
       const res = await fetch(`/api/todos/${todo.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          isCompleted: !todo.isCompleted,
-        } satisfies UpdateTodoRequestBody),
+        body: JSON.stringify(patch),
       });
       if (!res.ok) {
         const body = (await res.json()) as ApiErrorResponse;
@@ -186,7 +212,7 @@ export default function Home() {
 
       <main className="flex flex-1 justify-center px-4 py-8 sm:py-12">
         <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl shadow-black/40 sm:p-8">
-          <form onSubmit={handleAdd} className="flex gap-2">
+          <form onSubmit={handleAdd} className="flex flex-wrap gap-2">
             <input
               type="text"
               value={newTitle}
@@ -194,6 +220,25 @@ export default function Home() {
               disabled={isAdding}
               placeholder="やることを入力..."
               className="w-full min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-500 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50"
+            />
+            <select
+              value={newPriority}
+              onChange={(event) => setNewPriority(event.target.value as TodoPriority)}
+              disabled={isAdding}
+              aria-label="優先度"
+              className={inputClassName}
+            >
+              <option value="high">高</option>
+              <option value="medium">中</option>
+              <option value="low">低</option>
+            </select>
+            <input
+              type="date"
+              value={newDueDate}
+              onChange={(event) => setNewDueDate(event.target.value)}
+              disabled={isAdding}
+              aria-label="期限"
+              className={inputClassName}
             />
             <button
               type="submit"
@@ -228,12 +273,14 @@ export default function Home() {
               return (
                 <li
                   key={todo.id}
-                  className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5"
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5"
                 >
                   <input
                     type="checkbox"
                     checked={todo.isCompleted}
-                    onChange={() => handleToggle(todo)}
+                    onChange={() =>
+                      handleUpdate(todo, { isCompleted: !todo.isCompleted })
+                    }
                     disabled={isPending}
                     className="h-4 w-4 shrink-0 accent-zinc-50 disabled:opacity-50"
                     aria-label={`${todo.title} を完了にする`}
@@ -247,6 +294,41 @@ export default function Home() {
                   >
                     {todo.title}
                   </span>
+                  <select
+                    value={todo.priority}
+                    onChange={(event) =>
+                      handleUpdate(todo, {
+                        priority: event.target.value as TodoPriority,
+                      })
+                    }
+                    disabled={isPending}
+                    aria-label={`${todo.title} の優先度`}
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50 ${PRIORITY_BADGE_CLASSNAMES[todo.priority]}`}
+                  >
+                    <option value="high">{PRIORITY_LABELS.high}</option>
+                    <option value="medium">{PRIORITY_LABELS.medium}</option>
+                    <option value="low">{PRIORITY_LABELS.low}</option>
+                  </select>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="text-xs text-zinc-400">
+                      {formatDueDate(todo.dueDate)}
+                    </span>
+                    <input
+                      type="date"
+                      value={todo.dueDate ?? ""}
+                      onChange={(event) =>
+                        handleUpdate(todo, {
+                          dueDate:
+                            event.target.value === ""
+                              ? null
+                              : event.target.value,
+                        })
+                      }
+                      disabled={isPending}
+                      aria-label={`${todo.title} の期限`}
+                      className="w-[9.5rem] rounded-lg border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-300 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-400 disabled:opacity-50"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleDelete(todo.id)}

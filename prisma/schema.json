@@ -12,6 +12,25 @@
   "domain": {
     "namespaces": {
       "public": {
+        "enum": {
+          "TodoPriority": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "high",
+                "value": "high"
+              },
+              {
+                "name": "medium",
+                "value": "medium"
+              },
+              {
+                "name": "low",
+                "value": "low"
+              }
+            ]
+          }
+        },
         "models": {
           "Todo": {
             "fields": {
@@ -19,6 +38,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "dueDate": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/date-string@1",
                   "kind": "scalar"
                 }
               },
@@ -34,6 +60,19 @@
                 "type": {
                   "codecId": "pg/bool@1",
                   "kind": "scalar"
+                }
+              },
+              "priority": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "TodoPriority",
+                  "namespaceId": "public",
+                  "plane": "domain"
                 }
               },
               "title": {
@@ -57,11 +96,17 @@
                 "createdAt": {
                   "column": "created_at"
                 },
+                "dueDate": {
+                  "column": "due_date"
+                },
                 "id": {
                   "column": "id"
                 },
                 "isCompleted": {
                   "column": "is_completed"
+                },
+                "priority": {
+                  "column": "priority"
                 },
                 "title": {
                   "column": "title"
@@ -84,6 +129,13 @@
         "entries": {
           "table": {
             "todos": {
+              "checks": [
+                {
+                  "expression": "\"priority\" IN ('high', 'medium', 'low')",
+                  "name": "todos_priority_check_2eff154d",
+                  "prefix": "todos_priority_check"
+                }
+              ],
               "columns": {
                 "created_at": {
                   "codecId": "pg/timestamptz-string@1",
@@ -93,6 +145,11 @@
                   },
                   "nativeType": "timestamptz",
                   "nullable": false
+                },
+                "due_date": {
+                  "codecId": "pg/date-string@1",
+                  "nativeType": "date",
+                  "nullable": true
                 },
                 "id": {
                   "codecId": "pg/uuid@1",
@@ -107,6 +164,21 @@
                   },
                   "nativeType": "bool",
                   "nullable": false
+                },
+                "priority": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "medium"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "TodoPriority",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "title": {
                   "codecId": "pg/text@1",
@@ -128,13 +200,23 @@
               },
               "uniques": []
             }
+          },
+          "valueSet": {
+            "TodoPriority": {
+              "kind": "valueSet",
+              "values": [
+                "high",
+                "medium",
+                "low"
+              ]
+            }
           }
         },
         "id": "public",
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ada0b0d5f5231aea36b93700b582f811a81440d1b706a6fca1e4184b723acd83"
+    "storageHash": "6599c85228c274c615c50b9817f3c7f64ca7249deb729e75fa739ab71b72141e"
   },
   "execution": {
     "executionHash": "00ac1d5e9e28221ae6dcddbda38165110580246f09e6105a888507be62d69ccb",
