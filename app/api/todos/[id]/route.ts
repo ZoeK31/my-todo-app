@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/prisma/db";
 import { createClient } from "@/lib/supabase/server";
-import type { ApiErrorResponse, TodoDto } from "../route";
+import type { ApiErrorResponse, TodoDto, TodoPriority } from "../route";
 
 // ---- 画面側と共有する型 ----
 
 export type UpdateTodoRequestBody = {
-  isCompleted: boolean;
+  title?: string;
+  isCompleted?: boolean;
+  priority?: TodoPriority;
+  dueDate?: string | null;
 };
 
 export type UpdateTodoResponse = {
@@ -19,16 +22,37 @@ export type DeleteTodoResponse = {
 
 // ---- 内部ヘルパー ----
 
+const TODO_PRIORITIES: readonly TodoPriority[] = ["high", "medium", "low"];
+
+function isValidPriority(value: unknown): value is TodoPriority {
+  return (
+    typeof value === "string" &&
+    (TODO_PRIORITIES as readonly string[]).includes(value)
+  );
+}
+
+const DUE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidDueDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!DUE_DATE_PATTERN.test(value)) return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
 function toDto(row: {
   id: string;
   title: string;
   isCompleted: boolean;
+  priority: TodoPriority;
+  dueDate: string | null;
   createdAt: string;
 }): TodoDto {
   return {
     id: row.id,
     title: row.title,
     isCompleted: row.isCompleted,
+    priority: row.priority,
+    dueDate: row.dueDate,
     createdAt: row.createdAt,
   };
 }
@@ -65,17 +89,66 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
   }
 
-  if (typeof body.isCompleted !== "boolean") {
+  const patch: {
+    title?: string;
+    isCompleted?: boolean;
+    priority?: TodoPriority;
+    dueDate?: string | null;
+  } = {};
+
+  if ("title" in body) {
+    const title = body.title?.trim();
+    if (!title) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "title は必須です。" },
+        { status: 400 },
+      );
+    }
+    patch.title = title;
+  }
+
+  if ("isCompleted" in body) {
+    if (typeof body.isCompleted !== "boolean") {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "isCompleted は真偽値で指定してください。" },
+        { status: 400 },
+      );
+    }
+    patch.isCompleted = body.isCompleted;
+  }
+
+  if ("priority" in body) {
+    if (!isValidPriority(body.priority)) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "priority は high / medium / low のいずれかで指定してください。" },
+        { status: 400 },
+      );
+    }
+    patch.priority = body.priority;
+  }
+
+  if ("dueDate" in body) {
+    if (body.dueDate !== null && !isValidDueDate(body.dueDate)) {
+      return NextResponse.json<ApiErrorResponse>(
+        { error: "dueDate は YYYY-MM-DD 形式、または null で指定してください。" },
+        { status: 400 },
+      );
+    }
+    patch.dueDate = body.dueDate;
+  }
+
+  if (Object.keys(patch).length === 0) {
     return NextResponse.json<ApiErrorResponse>(
-      { error: "isCompleted は真偽値で指定してください。" },
+      {
+        error:
+          "更新する項目 (title / isCompleted / priority / dueDate) を指定してください。",
+      },
       { status: 400 },
     );
   }
 
   // 必ず userId も条件に含め、自分の TODO 以外を更新できないようにする
-  const updated = await db.orm.public.Todo.where({ id, userId }).update({
-    isCompleted: body.isCompleted,
-  });
+  const updated = await db.orm.public.Todo.where({ id, userId }).update(patch);
 
   if (!updated) {
     return NextResponse.json<ApiErrorResponse>(

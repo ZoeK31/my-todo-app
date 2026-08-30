@@ -1,10 +1,19 @@
 // use prisma-next
 
+enum TodoPriority {
+  @@type("pg/text@1")
+  high   = "high"
+  medium = "medium"
+  low    = "low"
+}
+
 model Todo {
   id          Uuid              @id @default(uuid())
   userId      Uuid              @map("user_id")
   title       String
   isCompleted Boolean           @default(false) @map("is_completed")
+  priority    TodoPriority      @default(medium) @map("priority")
+  dueDate     DateString?       @map("due_date")
   createdAt   TimestamptzString @default(now()) @map("created_at")
 
   @@map("todos")
